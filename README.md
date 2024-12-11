@@ -12,6 +12,11 @@
 ## Overview
 This project implements an automated solution for collecting, processing, and monitoring network performance metrics from both NSX Edge nodes and ESXi hosts in a virtualized environment. The collected metrics are then published to VMware Aria Operations (vROps) for monitoring and analysis.
 
+The code has been developed and tested on the following product versions:
+- NSX 4.2.1
+- ESXi 8.0u3
+- Aria Operations 8.18.2
+
 ## Main Goals
 
 ### 1. Comprehensive Performance Monitoring
