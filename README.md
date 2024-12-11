@@ -228,8 +228,6 @@ collector = ESXiStatsCollector(verbose=True)
    - HTTPS access required for vROPs API
    - Firewall rules should be configured accordingly
   
-# Supplementary Technical Documentation
-
 ## Detailed Collection Process
 
 ### Edge Node Collection Commands
@@ -261,7 +259,7 @@ Parameters:
 
 ## Logging Examples
 
-### Edge Node Collector Verbose Output
+### Edge Node Collector Output
 ```
 2024-12-11 19:17:25,952 - INFO - NSX Edge Stats Collector initialized
 2024-12-11 19:17:25,953 - INFO - Found 2 edge nodes in configuration
@@ -269,7 +267,7 @@ Parameters:
 2024-12-11 19:17:25,953 - INFO - Processing node: 18b3dd22-2ba6-482a-80a3-eb90068dfb2d
 ```
 
-### ESXi Collector Verbose Output
+### ESXi Collector Output
 ```
 2024-12-11 19:17:36,326 - INFO - ESXi Stats Collector initialized
 2024-12-11 19:17:36,326 - INFO - Found 1 edge clusters in configuration
