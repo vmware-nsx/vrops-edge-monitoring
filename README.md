@@ -382,7 +382,7 @@ grep CRON /var/log/syslog
 # vROPs Metric Visualization
 
 ## Finding the NSX Adapter ID
-![Adapter ID Location](images/adapter-id.png)
+![Adapter ID Location](images/AdapaterID.png)
 The NSX adapter instance ID (highlighted in red) can be found in vROPs under:
 - Navigate to: Inventory Management -> Adapter Instances
 - Look for the NSX adapter entry
@@ -393,7 +393,7 @@ The NSX adapter instance ID (highlighted in red) can be found in vROPs under:
 The collected metrics are organized hierarchically in vROPs under the Edge Cluster object:
 
 ### Edge Node Level Metrics
-![Edge Node CPU Usage](images/edge-cpu-usage.png)
+![Edge Node CPU Usage](images/edge_max_cpu_usage.png)
 - Located under EdgePerformanceMetrics/EdgeNodes
 - Shows cluster-wide metrics including:
   - Maximum CPU usage across nodes
@@ -401,7 +401,7 @@ The collected metrics are organized hierarchically in vROPs under the Edge Clust
   - CPU utilization trends
 
 ### Physical Interface Metrics
-![Interface Statistics](images/interface-stats.png)
+![Interface Statistics](images/RX_MISSES.png)
 - Found under EdgePerformanceMetrics/PhysicalPorts
 - Per-interface statistics including:
   - RX_MISSES counter
@@ -409,7 +409,7 @@ The collected metrics are organized hierarchically in vROPs under the Edge Clust
   - Shows historical trends of packet drops and errors
 
 ### ESXi Host Metrics
-![ESXi EnsNetWorld Stats](images/esxi-ensnetworld.png)
+![ESXi EnsNetWorld Stats](images/ENS_MAX_USED.png)
 - Located under EdgePerformanceMetrics/ESXi
 - EnsNetWorld thread statistics:
   - CPU usage per thread
@@ -417,7 +417,7 @@ The collected metrics are organized hierarchically in vROPs under the Edge Clust
   - Thread utilization trends
 
 ### Individual Thread Metrics
-![VMNIC Thread Details](images/vmnic-threads.png)
+![VMNIC Thread Details](images/ESX_Pollworld.png)
 - Detailed view of individual VMNIC threads
 - Shows:
   - Per-thread CPU usage
