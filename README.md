@@ -355,214 +355,29 @@ suite_api_json = {
 - ESXi collection: ~1-2 seconds per host
 - vROPs publication: ~1 second per batch
 
-# Crontab Configuration for Edge Monitoring
+## Setup Steps
 
-## Basic Setup
-
-### 1. Create a Wrapper Script
-First, create a shell script to run the monitoring script with proper environment:
-
+### 1. Create Log File
 ```bash
-#!/bin/bash
-
-# edge_monitoring_wrapper.sh
-cd /path/to/ScriptsFolder
-python3 getEdgeNodeStatsMainScript.py
-```
-
-Make the wrapper script executable:
-```bash
-chmod +x edge_monitoring_wrapper.sh
+# Create log file
+sudo touch /var/log/edge_monitoring.log
+sudo chmod 666 /var/log/edge_monitoring.log
 ```
 
 ### 2. Add to Crontab
-Edit crontab using:
 ```bash
+# Open crontab editor
 crontab -e
+
+# Add this line to run every minute (replace /path/to with your actual path)
+* * * * * cd /path/to/ScriptsFolder && python3 getEdgeNodeStatsMainScript.py >> /var/log/edge_monitoring.log 2>&1
 ```
 
-Add the following line to run every minute:
+### 3. Verify Operation
 ```bash
-* * * * * /path/to/edge_monitoring_wrapper.sh >> /path/to/cron.log 2>&1
-```
+# Check if script is running (shows recent log entries)
+tail -f /var/log/edge_monitoring.log
 
-## Detailed Setup Instructions
-
-### 1. Environment Preparation
-
-1. Verify Python Path:
-```bash
-which python3
-```
-
-2. Set up logging directory:
-```bash
-mkdir -p /var/log/edge_monitoring
-chmod 755 /var/log/edge_monitoring
-```
-
-3. Create a comprehensive wrapper script:
-```bash
-#!/bin/bash
-
-# edge_monitoring_wrapper.sh
-
-# Set environment variables if needed
-export PYTHONPATH=/path/to/ScriptsFolder
-
-# Set working directory
-cd /path/to/ScriptsFolder
-
-# Log start time
-echo "$(date): Starting Edge Monitoring Script" >> /var/log/edge_monitoring/cron.log
-
-# Run script
-python3 getEdgeNodeStatsMainScript.py >> /var/log/edge_monitoring/cron.log 2>&1
-
-# Log completion
-echo "$(date): Completed Edge Monitoring Script" >> /var/log/edge_monitoring/cron.log
-```
-
-### 2. Crontab Configuration Options
-
-Basic (every minute):
-```bash
-* * * * * /path/to/edge_monitoring_wrapper.sh
-```
-
-With error logging:
-```bash
-* * * * * /path/to/edge_monitoring_wrapper.sh >> /var/log/edge_monitoring/cron.log 2>&1
-```
-
-With lock file to prevent overlapping:
-```bash
-* * * * * flock -n /tmp/edge_monitoring.lock /path/to/edge_monitoring_wrapper.sh
-```
-
-### 3. Log Rotation Configuration
-
-Create `/etc/logrotate.d/edge_monitoring`:
-```
-/var/log/edge_monitoring/cron.log {
-    daily
-    rotate 7
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 644 root root
-}
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. Script Not Running
-- Check crontab is installed and running:
-```bash
-systemctl status cron
-```
-- Verify script permissions:
-```bash
-ls -l /path/to/edge_monitoring_wrapper.sh
-```
-
-2. Python Environment Issues
-- Add complete path to python:
-```bash
-* * * * * /usr/bin/python3 /path/to/getEdgeNodeStatsMainScript.py
-```
-
-3. Log File Permissions
-- Ensure proper permissions:
-```bash
-chown -R user:group /var/log/edge_monitoring
-chmod 755 /var/log/edge_monitoring
-chmod 644 /var/log/edge_monitoring/cron.log
-```
-
-### Monitoring Cron Execution
-
-1. Check Cron Logs
-```bash
+# Check cron logs if there are issues
 grep CRON /var/log/syslog
-```
-
-2. Monitor Script Execution
-```bash
-tail -f /var/log/edge_monitoring/cron.log
-```
-
-### Best Practices
-
-1. Test the wrapper script manually first:
-```bash
-./edge_monitoring_wrapper.sh
-```
-
-2. Use absolute paths in crontab entries
-
-3. Set up log rotation to manage disk space
-
-4. Add proper error handling in the wrapper script:
-```bash
-#!/bin/bash
-set -e
-
-# Log function
-log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" >> /var/log/edge_monitoring/cron.log
-}
-
-# Error handling
-handle_error() {
-    log "Error occurred in edge monitoring script: $1"
-    exit 1
-}
-
-trap 'handle_error "$BASH_COMMAND"' ERR
-
-# Main execution
-log "Starting Edge Monitoring Script"
-cd /path/to/ScriptsFolder || handle_error "Failed to change directory"
-python3 getEdgeNodeStatsMainScript.py || handle_error "Script execution failed"
-log "Completed Edge Monitoring Script"
-```
-
-## Monitoring and Maintenance
-
-### Regular Checks
-
-1. Check log files for errors:
-```bash
-grep ERROR /var/log/edge_monitoring/cron.log
-```
-
-2. Monitor script duration:
-```bash
-grep "Starting\|Completed" /var/log/edge_monitoring/cron.log
-```
-
-3. Verify crontab entry:
-```bash
-crontab -l
-```
-
-### Maintenance Tasks
-
-1. Regular log rotation:
-```bash
-logrotate -f /etc/logrotate.d/edge_monitoring
-```
-
-2. Check disk space:
-```bash
-du -sh /var/log/edge_monitoring/
-```
-
-3. Test script execution:
-```bash
-/path/to/edge_monitoring_wrapper.sh
 ```
