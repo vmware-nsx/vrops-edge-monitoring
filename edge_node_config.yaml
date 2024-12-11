@@ -1,0 +1,15 @@
+edge_nodes:
+  18b3dd22-2ba6-482a-80a3-eb90068dfb2d: 10.191.21.93
+  e5b7ce1b-4210-46dd-a3f9-38bd1c71e332: 10.191.21.97
+
+# Edge Cluster to Node Mapping
+edge_clusters:
+  2ebffbe1-8aca-46de-919a-cf606c15ed82:
+    nodes:
+      - 18b3dd22-2ba6-482a-80a3-eb90068dfb2d
+      - e5b7ce1b-4210-46dd-a3f9-38bd1c71e332
+    esxi_hosts:
+      esxi-01: 10.163.183.151
+      esxi-02: 10.163.183.152
+  
+
