@@ -10,7 +10,7 @@
 - [Operational Details](#operational-details)
 
 ## Overview
-This project implements an automated solution for collecting, processing, and monitoring network performance metrics from both NSX Edge nodes and ESXi hosts in a virtualized environment. The collected metrics are then published to vRealize Operations (vROps) for monitoring and analysis.
+This project implements an automated solution for collecting, processing, and monitoring network performance metrics from both NSX Edge nodes and ESXi hosts in a virtualized environment. The collected metrics are then published to VMware Aria Operations (vROps) for monitoring and analysis.
 
 ## Main Goals
 
@@ -425,15 +425,4 @@ The collected metrics are organized hierarchically in vROPs under the Edge Clust
   - Thread-specific performance data
   - Historical trending of thread utilization
 
-## Key Features
-1. Each metric includes historical data visualization
-2. Graphs show minimum, maximum, and current values
-3. Metrics are automatically scaled for readability
-4. Data points are collected every minute
-5. Hover tooltips show exact values at any point in time
 
-## Common Metric Paths
-- Edge Node CPU: `EdgePerformanceMetrics|EdgeNodes|max_values|cpu_usage`
-- Interface Errors: `EdgePerformanceMetrics|PhysicalPorts|fp-eth1|RX_ERRORS`
-- ESXi Thread Usage: `EdgePerformanceMetrics|ESXi|esxi-02|EnsNetWorld|max_values|used`
-- VMNIC Statistics: `EdgePerformanceMetrics|ESXi|esxi-01|vmnic2|max_values|used`
