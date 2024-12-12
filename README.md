@@ -262,6 +262,364 @@ Parameters:
 - `-W`: Wide output format
 - `-A`: All statistics
 
+## Edge Node Collector Output Structure
+
+The Edge Node collector produces a nested dictionary structure containing metrics from all monitored Edge nodes:
+
+```python
+{
+  "nodes": {
+    "18b3dd22-2ba6-482a-80a3-eb90068dfb2d": {    # Edge Node UUID
+      "interfaces": {
+        "fp-eth0": {                              # Interface name
+          "rx_errors": 0.0,
+          "rx_misses": 0.0,
+          "tx_errors": 0.0
+        },
+        "fp-eth1": {
+          "rx_errors": 76421.0,                   # Cumulative error count
+          "rx_misses": 6448.0,
+          "tx_errors": 0.0
+        }
+      },
+      "performance": {
+        "cpu_stats": {
+          "0": {                                  # Core ID
+            "usage": 5.0,                         # Percentage
+            "rx": 17130.0,                        # Packets/sec
+            "tx": 17130.0,
+            "crypto": 0.0,
+            "slowpath": 0.0,
+            "intercore": 0.0
+          }
+        },
+        "flow_cache_stats": {
+          "micro_hit_rate": {                     # Per core hit rates
+            "0": 100.0,
+            "1": 100.0,
+            "2": null
+          },
+          "mega_hit_rate": {
+            "0": 6.0,
+            "1": 10.0,
+            "2": null
+          }
+        }
+      }
+    }
+  },
+  "max_values": {                                # Maximum values across all nodes
+    "interfaces": {
+      "rx_errors": 76421.0,
+      "rx_misses": 6448.0,
+      "tx_errors": 0.0
+    },
+    "cpu": {
+      "usage": 58.0,
+      "crypto": 0.0,
+      "slowpath": 20.0,
+      "intercore": 0.0
+    },
+    "flow_cache": {
+      "micro_hit_rate": 100.0,
+      "mega_hit_rate": 2.0
+    }
+  }
+}
+```
+
+### Data Collection Process
+1. Interface Statistics:
+   - Collected via `get interfaces | json` command
+   - Parsed from JSON response
+   - Accumulated error and miss counts stored
+
+2. Performance Statistics:
+   - Collected via `get dataplane perfstats {interval}` command
+   - CPU metrics sampled over specified interval
+   - Flow cache statistics gathered per core
+
+3. Maximum Values:
+   - Calculated across all nodes during processing
+   - Updated for each metric category
+   - Stored in top-level max_values section
+
+## ESXi Collector Output Structure
+
+The ESXi collector produces a structure focusing on thread-level statistics:
+
+```python
+{
+  "hosts": {
+    "esxi-01": {                                # ESXi hostname
+      "vmnic_stats": {
+        "vmnic2": {                            # Network interface
+          "max_used": 99.52,                   # Maximum CPU usage
+          "max_ready": 0.29,                   # Maximum ready time
+          "threads": {
+            "vmnic2-pollWorld-0-0x4301158a2040": {
+              "used": 26.17,                   # Current CPU usage
+              "ready": 0.21                    # Current ready time
+            }
+          }
+        }
+      }
+    },
+    "esxi-02": {
+      "vmnic_stats": {
+        "ens": {                               # EnsNetWorld metrics
+          "max_used": 92.33,
+          "max_ready": 2.88,
+          "tx": {                              # Transmit threads
+            "threads": {
+              "EnsNetWorld-0-1": {
+                "used": 5.96,
+                "ready": 0.52
+              }
+            }
+          },
+          "rx": {                              # Receive threads
+            "threads": {
+              "EnsNetWorld-0-0": {
+                "used": 71.82,
+                "ready": 2.88
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "max_values": {                              # Cluster-wide maximums
+    "used": 99.52,
+    "ready": 2.88
+  }
+}
+```
+
+### Data Collection Process
+1. Thread Statistics:
+   - Collected via `net-stats -i 1 -tW -A` command
+   - Filtered for threads above usage threshold (default 2%)
+   - Separated into VMNIC and EnsNetWorld categories
+
+2. VMNIC Processing:
+   - Identifies pollWorld threads per interface
+   - Tracks CPU usage and ready time
+   - Calculates maximum values per interface
+
+3. EnsNetWorld Processing:
+   - Separates TX and RX threads
+   - Thread ID pattern determines type:
+     - Odd numbers: TX threads
+     - Even numbers: RX threads
+   - Maintains maximum values per direction
+
+4. Maximum Values:
+   - Calculated across all hosts
+   - Updated for both used and ready metrics
+   - Represents cluster-wide peak values
+
+### Thread Filtering
+- Only threads exceeding the usage threshold are included
+- Default threshold is 2% CPU usage
+- Reduces noise in collected metrics
+- Focuses on significant resource consumers
+
+## Statistics Processing in Main Script
+
+### Edge Node Statistics Processing
+
+#### Method: `_process_edge_stats(stats, timestamp)`
+
+This method transforms raw Edge Node statistics into vROPs metric format.
+
+```python
+def _process_edge_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
+```
+
+#### Processing Steps
+
+1. **CPU Statistics**
+```python
+# For each core in cpu_stats
+metrics.append({
+    'statKey': f'EdgePerformanceMetrics|CPU_Stats|Cores:{core}|{stat_name.upper()}',
+    'timestamps': [timestamp],
+    'data': [value]
+})
+```
+- Processes each core's metrics separately
+- Transforms raw values into time-series data points
+- Includes: usage, rx, tx, crypto, slowpath, intercore
+
+2. **Flow Cache Statistics**
+```python
+# For each cache type (micro/mega) and core
+if hit_rate is not None and hit_rate > 0:
+    metrics.append({
+        'statKey': f'EdgePerformanceMetrics|Flow_Cache_Stats|{cache_type}|Core:{core}',
+        'timestamps': [timestamp],
+        'data': [hit_rate]
+    })
+```
+- Filters out null and zero values
+- Processes both micro and mega cache hit rates
+- Maintains per-core statistics
+
+3. **Interface Statistics**
+```python
+# For each interface and metric
+if value > 0:
+    metrics.append({
+        'statKey': f'EdgePerformanceMetrics|PhysicalPorts:{interface}|{stat_name.upper()}',
+        'timestamps': [timestamp],
+        'data': [value]
+    })
+```
+- Only includes non-zero values
+- Tracks rx_errors, rx_misses, tx_errors
+- Maintains historical data per interface
+
+### ESXi Statistics Processing
+
+#### Method: `_process_esxi_stats(stats, timestamp)`
+
+Processes ESXi host statistics with focus on thread performance.
+
+```python
+def _process_esxi_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
+```
+
+#### Processing Steps
+
+1. **Thread Counting and Filtering**
+```python
+# Count threads over threshold for each host
+if thread_stats.get('used', 0) > self.usage_threshold:
+    host_threads_over_threshold += 1
+    metrics.append({
+        'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|threads_over_usage_threshold',
+        'timestamps': [timestamp],
+        'data': [host_threads_over_threshold]
+    })
+```
+- Counts threads exceeding usage threshold per host
+- Default threshold: 2% CPU usage
+- Generates thread count metrics
+
+2. **VMNIC Thread Processing**
+```python
+# Process VMNIC threads
+if vmnic_data.get('max_used', 0) > 0:
+    metrics.append({
+        'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|{vmnic}|max_values|used',
+        'timestamps': [timestamp],
+        'data': [vmnic_data['max_used']]
+    })
+```
+- Processes each VMNIC's maximum usage
+- Tracks ready time statistics
+- Filters based on activity threshold
+
+3. **EnsNetWorld Thread Processing**
+```python
+# Process TX/RX threads separately
+for thread_name, thread_stats in ens_data.get('tx', {}).get('threads', {}).items():
+    if thread_stats.get('used', 0) > 0:
+        metrics.append({
+            'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|EnsNetWorld|TX|{thread_name}|used',
+            'timestamps': [timestamp],
+            'data': [thread_usage]
+        })
+```
+- Separates TX and RX threads
+- Maintains directional statistics
+- Tracks individual thread performance
+
+#### Combined Processing
+
+```python
+def collect_cluster_metrics(self, edge_stats, esxi_stats, timestamp):
+```
+
+The main script combines metrics from both collectors:
+
+1. **Edge Maximum Values**
+```python
+edge_max_values = {
+    'cpu_usage': 0.0,
+    'crypto': 0.0,
+    'slowpath': 0.0,
+    'intercore': 0.0
+}
+```
+- Tracks peak values across all Edge nodes
+- Updates maximum values for each metric type
+- Maintains historical trends
+
+2. **Flow Cache Aggregation**
+```python
+flow_cache_totals = {
+    'micro_hit_rate': {'sum': 0.0, 'count': 0},
+    'mega_hit_rate': {'sum': 0.0, 'count': 0}
+}
+```
+- Calculates average hit rates
+- Excludes inactive cores
+- Provides cluster-wide cache performance metrics
+
+3. **Interface Totals**
+```python
+interface_totals = {
+    'rx_misses': 0.0,
+    'tx_errors': 0.0
+}
+```
+- Sums error counts across interfaces
+- Tracks total packet misses
+- Monitors overall interface health
+
+#### Metric Path Structure
+
+The processed statistics follow these path patterns:
+
+1. Edge Node Metrics:
+```
+EdgePerformanceMetrics|EdgeNodes|max_values|<metric>
+EdgePerformanceMetrics|PhysicalPorts|<interface>|<metric>
+EdgePerformanceMetrics|Flow_Cache_Stats|<type>|Core:<id>
+```
+
+2. ESXi Metrics:
+```
+EdgePerformanceMetrics|ESXi|<host>|<vmnic>|max_values|<metric>
+EdgePerformanceMetrics|ESXi|<host>|EnsNetWorld|<direction>|<thread>|<metric>
+EdgePerformanceMetrics|ESXi|max_values|<metric>
+```
+
+#### Final Output
+The processed metrics are formatted for vROPs ingestion:
+```python
+{
+    'id': resource_id,
+    'stat-contents': [
+        {
+            'statKey': metric_path,
+            'timestamps': [timestamp],
+            'data': [value]
+        }
+        # ... additional metrics
+    ]
+}
+```
+
+This processed data structure enables:
+- Historical tracking of performance metrics
+- Aggregated views of cluster performance
+- Detailed thread-level analysis
+- Threshold-based monitoring
+
 ## Logging Examples
 
 ### Edge Node Collector Output
@@ -279,7 +637,7 @@ Parameters:
 2024-12-11 19:17:36,326 - INFO - Found 2 ESXi hosts in cluster
 ```
 
-## Thread Processing Details
+## Thread Processing
 
 ### Thread Filtering Logic
 ```python
