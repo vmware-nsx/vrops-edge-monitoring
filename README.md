@@ -833,5 +833,3 @@ The collected metrics are organized hierarchically in vROPs under the Edge Clust
   - Maximum values over time
   - Thread-specific performance data
   - Historical trending of thread utilization
-
-
