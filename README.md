@@ -132,57 +132,72 @@ The code has been developed and tested on the following product versions:
 
 ## Configuration
 
-### Edge Node Configuration File (`edge_node_config.yaml`)
+The solution uses two YAML files for configuration: one for endpoints/infrastructure details and another for credentials.
+
+### Configuration File (`config.yaml`)
 ```yaml
+nsx_manager:
+  ip: "10.191.21.92"
+
 edge_nodes:
   "18b3dd22-2ba6-482a-80a3-eb90068dfb2d": "10.191.21.93"  # Edge Node UUID: IP address
   "e5b7ce1b-4210-46dd-a3f9-38bd1c71e332": "10.191.21.97"  # Edge Node UUID: IP address
 
 edge_clusters:
   "2ebffbe1-8aca-46de-919a-cf606c15ed82":    # Edge Cluster UUID
+    nodes:
+      - "18b3dd22-2ba6-482a-80a3-eb90068dfb2d"
+      - "e5b7ce1b-4210-46dd-a3f9-38bd1c71e332"
     esxi_hosts:
       "esxi-01": "10.163.183.151"            # ESXi hostname: IP address
       "esxi-02": "10.163.183.152"            # ESXi hostname: IP address
+
+vrops_instance:
+  ip: "10.191.21.95"
+  adapter_instance_id: "8e434d15-a29b-4776-aea3-bb21bc5c2c2f"
 ```
 
-Configuration Requirements:
-- Edge Node UUIDs must be obtained from NSX Manager for the nodes to be monitored
-- Edge Cluster UUID must match the NSX Edge Cluster UUID containing the monitored nodes
-- ESXi hosts should include all possible hosts where the Edge nodes could run
+### Credentials File (`credentials.yaml`)
+```yaml
+nsx_manager:
+  username: "admin"
+  password: "****"
+
+edge_nodes:
+  default:  # Default credentials for all edge nodes
+    username: "admin"
+    password: "****"
+  nodes:    # Optional: Node-specific credentials
+    "e5b7ce1b-4210-46dd-a3f9-38bd1c71e332":
+      username: "admin"
+      password: "****"
+
+esxi_hosts:
+  default:  # Default credentials for all ESXi hosts
+    username: "root"
+    password: "****"
+  hosts:    # Optional: Host-specific credentials
+    "esxi-01":
+      username: "root"
+      password: "****"
+
+vrops_instance:
+  username: "admin"
+  password: "****"
+```
+
+### Configuration Requirements
+- Both files should be in the same directory as the Python scripts
+- Edge Node UUIDs must be obtained from NSX Manager
+- Edge Cluster UUID must match the NSX Edge Cluster UUID
+- ESXi hosts should include all hosts where Edge nodes could run
 - All IP addresses must be reachable from the monitoring server
 
-### Requirements Configuration (`requirements.py`)
-```python
-requirement = {
-    "nsx_manager": {
-        "ip": "<nsx_manager_ip>",
-        "credential": {
-            "username": "admin",
-            "password": "****"
-        }
-    },
-    "nsx_edge_nodes": {
-        "credential": {
-            "username": "admin",
-            "password": "****"
-        }
-    },
-    "esxi_hosts": {
-        "credential": {
-            "username": "root",
-            "password": "****"
-        }
-    },
-    "vrops_instance": {
-        "ip": "<vrops_ip>",
-        "credential": {
-            "username": "admin",
-            "password": "****"
-        },
-        "adapterInstanceId": "<adapter_instance_id>"  # From vROPs UI: Inventory->Adapters
-    }
-}
-```
+### Credential Notes
+- Default credentials can be specified for edge nodes and ESXi hosts
+- Individual credentials can be specified for specific nodes/hosts
+- If a node/host has specific credentials defined, those will be used instead of defaults
+- If no specific credentials are found, the default credentials will be used
 
 ## Metric Details
 
