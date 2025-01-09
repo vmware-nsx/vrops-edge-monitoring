@@ -154,8 +154,10 @@ edge_clusters:
 
 vrops_instance:
   ip: "10.191.21.95"
-  adapter_instance_id: "8e434d15-a29b-4776-aea3-bb21bc5c2c2f"
+  adapter_instance_id: "8e434d15-a29b-4776-aea3-bb21bc5c2c2f"  # See note below about finding this ID
 ```
+
+> **Note:** For instructions on finding your vROPs NSX adapter instance ID, refer to the [vROPs Metric Visualization](https://github.com/vmware-nsx/vrops-edge-monitoring/blob/main/README.md#vrops-metric-visualization) section of this documentation.
 
 ### Credentials File (`credentials.yaml`)
 ```yaml
@@ -198,7 +200,7 @@ vrops_instance:
 - Individual credentials can be specified for specific nodes/hosts
 - If a node/host has specific credentials defined, those will be used instead of defaults
 - If no specific credentials are found, the default credentials will be used
-
+  
 ## Metric Details
 
 ### Edge Node Metrics
