@@ -8,11 +8,10 @@ from dataclasses import dataclass
 import copy
 
 import requestvROpsAccessToken as accessTokenProvider
-from edge_node_config_reader import load_edge_node_config
-import requirements as req
 import sendNotificationOnError as notify
 from getAllStatsFromEdgeNode import NSXEdgeStatsCollector
 from getAllStatsFromESXi import ESXiStatsCollector
+from config_reader import load_config
 
 # Default structures for missing or failed collections
 DEFAULT_EDGE_NODE_STATS = {
@@ -44,17 +43,33 @@ DEFAULT_ESXI_STATS = {
 }
 
 class StatsCollector:
-    def __init__(self, verbose: bool = False, usage_threshold: float = 85.0):
+     def __init__(self, verbose: bool = False, usage_threshold: float = 85.0):
         self.logger = logging.getLogger(__name__)
         self.verbose = verbose
         self.usage_threshold = usage_threshold
-        self.edge_node_ip_map, self.edge_clusters = load_edge_node_config()
-        self.vrops_config = req.requirement['vrops_instance']
+        
+        # Load both configuration and credentials
+        self.config, self.credentials = load_config()
+        
+        # Update attribute assignments
+        self.edge_node_ip_map = self.config['edge_nodes']
+        self.edge_clusters = self.config['edge_clusters']
+        self.vrops_config = {
+            'ip': self.config['vrops_instance']['ip'],
+            'adapterInstanceId': self.config['vrops_instance']['adapter_instance_id']
+        }
+        
+        # Access token remains the same
         self.access_token = accessTokenProvider.vROpsAccessToken
-        self.edge_credentials = req.requirement['nsx_edge_nodes']['credential']
-        self.esxi_credentials = req.requirement['esxi_hosts']['credential']
+        
+        # Update credential references
+        self.edge_credentials = self.credentials['edge_nodes']
+        self.esxi_credentials = self.credentials['esxi_hosts']
+        
+        if self.verbose:
+            self.logger.info("StatsCollector initialized with new configuration format")
 
-    def _get_vrops_resource_map(self, adapter_kind: str, resource_kind: str) -> Dict[str, str]:
+     def _get_vrops_resource_map(self, adapter_kind: str, resource_kind: str) -> Dict[str, str]:
         """Get vROps resource ID mapping"""
         url = (f"https://{self.vrops_config['ip']}/suite-api/api/resources"
                f"?adapterInstanceId={self.vrops_config['adapterInstanceId']}"
@@ -88,7 +103,7 @@ class StatsCollector:
             self.logger.error(f"Failed to get vROps resource mapping: {e}")
             return {}
 
-    def _publish_to_vrops(self, metrics: Dict[str, Any]) -> bool:
+     def _publish_to_vrops(self, metrics: Dict[str, Any]) -> bool:
         """Publish metrics to vROps"""
         url = (f"https://{self.vrops_config['ip']}/suite-api/api/resources/stats"
                f"?disableAnalyticsProcessing=false&_no_links=true")
@@ -109,7 +124,7 @@ class StatsCollector:
             return False
 
 
-    def _process_edge_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
+     def _process_edge_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
         """Process Edge Node stats into vROps format"""
         metrics = []
         
@@ -147,7 +162,7 @@ class StatsCollector:
 
         return metrics
 
-    def _process_esxi_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
+     def _process_esxi_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
         """Process ESXi stats into vROps format"""
         metrics = []
         total_threads_over_threshold = 0
@@ -271,7 +286,7 @@ class StatsCollector:
 
         return metrics
         
-    def _merge_stats(self, default_stats: Dict, collected_stats: Dict) -> Dict:
+     def _merge_stats(self, default_stats: Dict, collected_stats: Dict) -> Dict:
         """
         Merge collected stats with defaults, ensuring dynamic vmnic handling.
         Creates default structure for any new vmnics found in collected stats.
@@ -330,7 +345,7 @@ class StatsCollector:
         return merged
 
 
-    def collect_cluster_metrics(self, edge_stats: Dict[str, Any], esxi_stats: Dict[str, Any], timestamp: int) -> list:
+     def collect_cluster_metrics(self, edge_stats: Dict[str, Any], esxi_stats: Dict[str, Any], timestamp: int) -> list:
         """Generate cluster-level metrics including average and total values"""
         metrics = []
         
@@ -429,10 +444,10 @@ class StatsCollector:
 
         return metrics
     
-    def collect_and_publish_stats(self):
+     def collect_and_publish_stats(self):
         """Collect and publish both Edge and ESXi stats"""
         try:
-            # Get vROps resource mappings
+            # Get vROps resource mappings using updated config
             node_ids = self._get_vrops_resource_map('NSXTAdapter', 'TransportNode')
             cluster_ids = self._get_vrops_resource_map('NSXTAdapter', 'EdgeCluster')
             

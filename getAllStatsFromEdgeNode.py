@@ -5,9 +5,9 @@ import paramiko
 import yaml
 from dataclasses import dataclass
 import sys
+import re
+from config_reader import load_config
 
-# Import configuration
-import requirements as req
 
 def calculate_max_values(stats: Dict[str, Dict[str, Any]]) -> Dict[str, float]:
     """Calculate maximum and minimum values across all edge nodes"""
@@ -99,13 +99,58 @@ class NSXEdgeStatsCollector:
     def __init__(self, verbose: bool = False):
         self.logger = logging.getLogger(__name__)
         self.verbose = verbose
-        self.edge_node_ip_map, self.edge_clusters = load_edge_node_config()
-        self.credentials = req.requirement['nsx_edge_nodes']['credential']
+        
+        # Load both configuration and credentials
+        config, credentials = load_config()
+        self.edge_node_ip_map = config['edge_nodes']
+        self.edge_clusters = config['edge_clusters']
+        self.edge_credentials = credentials['edge_nodes']
+        
         self.ssh_clients = {}
 
         if self.verbose:
             self.logger.info("NSX Edge Stats Collector initialized")
             self.logger.info(f"Found {len(self.edge_node_ip_map)} edge nodes in configuration")
+
+    def _is_timestamp_only(self, error_output: str) -> bool:
+        """
+        Check if the error output contains only a timestamp.
+        
+        Args:
+            error_output (str): The error output to check
+            
+        Returns:
+            bool: True if the error output only contains a timestamp, False otherwise
+        """
+        # Remove leading/trailing whitespace and empty lines
+        error_output = error_output.strip()
+        
+        # Common timestamp patterns
+        timestamp_patterns = [
+            # Pattern for "Thu Jan 09 2025 UTC 15:19:08.539" format
+            r'^[A-Za-z]{3}\s+[A-Za-z]{3}\s+\d{2}\s+\d{4}\s+UTC\s+\d{2}:\d{2}:\d{2}\.\d{3}$',
+            # Add more patterns if needed for other timestamp formats
+        ]
+        
+        for pattern in timestamp_patterns:
+            if re.match(pattern, error_output):
+                return True
+                
+        return False
+
+    def _get_node_credentials(self, node_id: str) -> Dict[str, str]:
+        """Get credentials for specific node, falling back to default if not found"""
+        default_creds = self.edge_credentials['default']
+        node_specific_creds = self.edge_credentials.get('nodes', {}).get(node_id)
+        
+        if node_specific_creds:
+            if self.verbose:
+                self.logger.info(f"Using specific credentials for node {node_id}")
+            return node_specific_creds
+        
+        if self.verbose:
+            self.logger.info(f"Using default credentials for node {node_id}")
+        return default_creds
 
     def _connect_to_node(self, node_id: str) -> None:
         """Establish SSH connection to edge node"""
@@ -113,6 +158,7 @@ class NSXEdgeStatsCollector:
             raise ValueError(f"Unknown node ID: {node_id}")
 
         node_ip = self.edge_node_ip_map[node_id]
+        credentials = self._get_node_credentials(node_id)
         
         if self.verbose:
             self.logger.info(f"Attempting to connect to node {node_id} ({node_ip})")
@@ -123,8 +169,8 @@ class NSXEdgeStatsCollector:
         try:
             ssh.connect(
                 node_ip,
-                username=self.credentials['username'],
-                password=self.credentials['password'],
+                username=credentials['username'],
+                password=credentials['password'],
                 timeout=10
             )
             self.ssh_clients[node_id] = ssh
@@ -160,7 +206,8 @@ class NSXEdgeStatsCollector:
             output = stdout.read().decode('utf-8')
             error = stderr.read().decode('utf-8')
             
-            if error and self.verbose:
+            # Only log warning if error output is not just a timestamp
+            if error and self.verbose and not self._is_timestamp_only(error):
                 self.logger.warning(f"Command produced error output: {error}")
             
             return json.loads(output)

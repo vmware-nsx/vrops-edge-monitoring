@@ -1,14 +1,18 @@
-import json
-import logging
-from typing import Dict, Any, Optional, Tuple
+
 import paramiko
 import re
-from dataclasses import dataclass
+import json
+import logging
+from typing import Dict, Any, Optional
 import sys
+import time
+import requests
+from dataclasses import dataclass
 import copy
 
-from edge_node_config_reader import load_edge_node_config
-import requirements as req
+from config_reader import load_config
+
+
 
 # Default stats structure for a host
 DEFAULT_HOST_STATS = {
@@ -26,27 +30,43 @@ class ESXiStatsCollector:
     def __init__(self, verbose: bool = False):
         self.logger = logging.getLogger(__name__)
         self.verbose = verbose
-        self.edge_node_ip_map, self.edge_clusters = load_edge_node_config()
-        self.credentials = req.requirement['esxi_hosts']['credential']
+        
+        # Load both configuration and credentials
+        config, credentials = load_config()
+        self.edge_node_ip_map = config['edge_nodes']
+        self.edge_clusters = config['edge_clusters']
+        self.esxi_credentials = credentials['esxi_hosts']
+        
         self.ssh_clients = {}
 
+    def _get_host_credentials(self, host_id: str) -> Dict[str, str]:
+        """Get credentials for specific host, falling back to default if not found"""
+        default_creds = self.esxi_credentials['default']
+        host_specific_creds = self.esxi_credentials.get('hosts', {}).get(host_id)
+        
+        if host_specific_creds:
+            if self.verbose:
+                self.logger.info(f"Using specific credentials for host {host_id}")
+            return host_specific_creds
+        
         if self.verbose:
-            self.logger.info("ESXi Stats Collector initialized")
-            self.logger.info(f"Found {len(self.edge_clusters)} edge clusters in configuration")
+            self.logger.info(f"Using default credentials for host {host_id}")
+        return default_creds
 
     def _connect_to_host(self, host_id: str, host_ip: str) -> None:
         """Establish SSH connection to ESXi host"""
         if self.verbose:
             self.logger.info(f"Attempting to connect to host {host_id} ({host_ip})")
 
+        credentials = self._get_host_credentials(host_id)
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
         try:
             ssh.connect(
                 host_ip,
-                username=self.credentials['username'],
-                password=self.credentials['password'],
+                username=credentials['username'],
+                password=credentials['password'],
                 timeout=10
             )
             self.ssh_clients[host_id] = ssh
