@@ -1,4 +1,3 @@
-
 import paramiko
 import re
 import json
@@ -39,26 +38,26 @@ class ESXiStatsCollector:
         
         self.ssh_clients = {}
 
-    def _get_host_credentials(self, host_id: str) -> Dict[str, str]:
-        """Get credentials for specific host, falling back to default if not found"""
+    def _get_host_credentials(self, host_ip: str) -> Dict[str, str]:
+        """Get credentials for specific host IP, falling back to default if not found"""
         default_creds = self.esxi_credentials['default']
-        host_specific_creds = self.esxi_credentials.get('hosts', {}).get(host_id)
+        host_specific_creds = self.esxi_credentials.get('hosts', {}).get(host_ip)
         
         if host_specific_creds:
             if self.verbose:
-                self.logger.info(f"Using specific credentials for host {host_id}")
+                self.logger.info(f"Using specific credentials for host IP {host_ip}")
             return host_specific_creds
         
         if self.verbose:
-            self.logger.info(f"Using default credentials for host {host_id}")
+            self.logger.info(f"Using default credentials for host IP {host_ip}")
         return default_creds
 
-    def _connect_to_host(self, host_id: str, host_ip: str) -> None:
-        """Establish SSH connection to ESXi host"""
+    def _connect_to_host(self, host_ip: str) -> None:
+        """Establish SSH connection to ESXi host using IP address"""
         if self.verbose:
-            self.logger.info(f"Attempting to connect to host {host_id} ({host_ip})")
+            self.logger.info(f"Attempting to connect to host at IP {host_ip}")
 
-        credentials = self._get_host_credentials(host_id)
+        credentials = self._get_host_credentials(host_ip)
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
@@ -69,10 +68,10 @@ class ESXiStatsCollector:
                 password=credentials['password'],
                 timeout=10
             )
-            self.ssh_clients[host_id] = ssh
-            self.logger.info(f"Connected to host {host_id} ({host_ip})")
+            self.ssh_clients[host_ip] = ssh
+            self.logger.info(f"Connected to host at IP {host_ip}")
         except Exception as e:
-            self.logger.error(f"Failed to connect to host {host_id} ({host_ip}): {e}")
+            self.logger.error(f"Failed to connect to host at IP {host_ip}: {e}")
             raise
 
     def _close_connections(self) -> None:
@@ -80,22 +79,22 @@ class ESXiStatsCollector:
         if self.verbose:
             self.logger.info(f"Closing {len(self.ssh_clients)} SSH connections")
 
-        for host_id, ssh in self.ssh_clients.items():
+        for host_ip, ssh in self.ssh_clients.items():
             try:
                 ssh.close()
-                self.logger.info(f"Disconnected from host {host_id}")
+                self.logger.info(f"Disconnected from host at IP {host_ip}")
             except Exception as e:
-                self.logger.warning(f"Error disconnecting from host {host_id}: {e}")
+                self.logger.warning(f"Error disconnecting from host at IP {host_ip}: {e}")
         self.ssh_clients.clear()
 
-    def _execute_command(self, host_id: str, command: str) -> Dict[str, Any]:
+    def _execute_command(self, host_ip: str, command: str) -> Dict[str, Any]:
         """Execute command and return parsed JSON output"""
         if self.verbose:
-            self.logger.info(f"Executing command on host {host_id}: {command}")
+            self.logger.info(f"Executing command on host at IP {host_ip}: {command}")
 
-        ssh = self.ssh_clients.get(host_id)
+        ssh = self.ssh_clients.get(host_ip)
         if not ssh:
-            raise RuntimeError(f"Not connected to host {host_id}")
+            raise RuntimeError(f"Not connected to host at IP {host_ip}")
 
         try:
             stdin, stdout, stderr = ssh.exec_command(command)
@@ -107,7 +106,7 @@ class ESXiStatsCollector:
                 
             return json.loads(output)
         except Exception as e:
-            self.logger.error(f"Error executing command '{command}' on host {host_id}: {e}")
+            self.logger.error(f"Error executing command '{command}' on host at IP {host_ip}: {e}")
             return {}
 
     def _process_vmnic_stats(self, stats_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -244,28 +243,32 @@ class ESXiStatsCollector:
             self.logger.info(f"Found {len(esxi_hosts)} ESXi hosts in cluster")
 
         try:
-            for host_id, host_ip in esxi_hosts.items():
+            # Now the key is the host_ip and the value is the vrops_id
+            for host_ip, vrops_id in esxi_hosts.items():
                 try:
                     if self.verbose:
-                        self.logger.info(f"Processing host {host_id} ({host_ip})")
+                        self.logger.info(f"Processing host at IP {host_ip} (vROPs ID: {vrops_id})")
 
-                    self._connect_to_host(host_id, host_ip)
+                    self._connect_to_host(host_ip)
                     
                     command = ESXiCommands.NET_STATS.format(interval=1)
-                    stats_data = self._execute_command(host_id, command)
+                    stats_data = self._execute_command(host_ip, command)
                     
                     if not stats_data:
                         if self.verbose:
-                            self.logger.warning(f"No stats data returned from host {host_id}")
-                        cluster_stats['hosts'][host_id] = copy.deepcopy(DEFAULT_HOST_STATS)
+                            self.logger.warning(f"No stats data returned from host at IP {host_ip}")
+                        stats = copy.deepcopy(DEFAULT_HOST_STATS)
+                        stats['vrops_id'] = vrops_id
+                        cluster_stats['hosts'][host_ip] = stats
                         continue
 
                     # Process stats
                     vmnic_stats = self._process_vmnic_stats(stats_data)
                     
                     if vmnic_stats:
-                        cluster_stats['hosts'][host_id] = {
-                            'vmnic_stats': vmnic_stats
+                        cluster_stats['hosts'][host_ip] = {
+                            'vmnic_stats': vmnic_stats,
+                            'vrops_id': vrops_id
                         }
 
                         # Update cluster max values
@@ -280,17 +283,21 @@ class ESXiStatsCollector:
                             )
                     else:
                         if self.verbose:
-                            self.logger.warning(f"No active vmnic stats found for host {host_id}")
-                        cluster_stats['hosts'][host_id] = copy.deepcopy(DEFAULT_HOST_STATS)
+                            self.logger.warning(f"No active vmnic stats found for host at IP {host_ip}")
+                        stats = copy.deepcopy(DEFAULT_HOST_STATS)
+                        stats['vrops_id'] = vrops_id
+                        cluster_stats['hosts'][host_ip] = stats
                     
                 except Exception as e:
-                    self.logger.error(f"Failed to collect stats from ESXi host {host_id}: {e}")
-                    cluster_stats['hosts'][host_id] = copy.deepcopy(DEFAULT_HOST_STATS)
+                    self.logger.error(f"Failed to collect stats from ESXi host at IP {host_ip}: {e}")
+                    stats = copy.deepcopy(DEFAULT_HOST_STATS)
+                    stats['vrops_id'] = vrops_id
+                    cluster_stats['hosts'][host_ip] = stats
                 finally:
-                    if host_id in self.ssh_clients:
-                        self.ssh_clients[host_id].close()
+                    if host_ip in self.ssh_clients:
+                        self.ssh_clients[host_ip].close()
                         if self.verbose:
-                            self.logger.info(f"Closed connection to host {host_id}")
+                            self.logger.info(f"Closed connection to host at IP {host_ip}")
                     
         except Exception as e:
             self.logger.error(f"Error collecting cluster stats: {e}")

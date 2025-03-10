@@ -11,8 +11,8 @@ edge_clusters:
       - 18b3dd22-2ba6-482a-80a3-eb90068dfb2d
       - e5b7ce1b-4210-46dd-a3f9-38bd1c71e332
     esxi_hosts:
-      esxi-01: 10.163.183.151
-      esxi-02: 10.163.183.152
+      10.163.183.151: 39095510-a095-4344-8d81-4de80da95871
+      10.163.183.152: bf7e490a-3f0f-4f00-b2f8-804e36d52df0
 
 vrops_instance:
   ip: 10.191.21.95
