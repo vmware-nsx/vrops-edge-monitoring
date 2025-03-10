@@ -27,10 +27,10 @@ DEFAULT_EDGE_NODE_STATS = {
         }
     },
     'interfaces': {
-        'fp-eth0': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0},
-        'fp-eth1': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0},
-        'fp-eth2': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0},
-        'fp-eth3': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0}
+        'fp-eth0': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0, 'tx_drops': 0},
+        'fp-eth1': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0, 'tx_drops': 0},
+        'fp-eth2': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0, 'tx_drops': 0},
+        'fp-eth3': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0, 'tx_drops': 0}
     }
 }
 
@@ -43,7 +43,7 @@ DEFAULT_ESXI_STATS = {
 }
 
 class StatsCollector:
-     def __init__(self, verbose: bool = False, usage_threshold: float = 85.0):
+    def __init__(self, verbose: bool = False, usage_threshold: float = 85.0):
         self.logger = logging.getLogger(__name__)
         self.verbose = verbose
         self.usage_threshold = usage_threshold
@@ -69,7 +69,7 @@ class StatsCollector:
         if self.verbose:
             self.logger.info("StatsCollector initialized with new configuration format")
 
-     def _get_vrops_resource_map(self, adapter_kind: str, resource_kind: str) -> Dict[str, str]:
+    def _get_vrops_resource_map(self, adapter_kind: str, resource_kind: str) -> Dict[str, str]:
         """Get vROps resource ID mapping"""
         url = (f"https://{self.vrops_config['ip']}/suite-api/api/resources"
                f"?adapterInstanceId={self.vrops_config['adapterInstanceId']}"
@@ -103,7 +103,7 @@ class StatsCollector:
             self.logger.error(f"Failed to get vROps resource mapping: {e}")
             return {}
 
-     def _publish_to_vrops(self, metrics: Dict[str, Any]) -> bool:
+    def _publish_to_vrops(self, metrics: Dict[str, Any]) -> bool:
         """Publish metrics to vROps"""
         url = (f"https://{self.vrops_config['ip']}/suite-api/api/resources/stats"
                f"?disableAnalyticsProcessing=false&_no_links=true")
@@ -123,8 +123,7 @@ class StatsCollector:
             self.logger.error(f"Failed to publish metrics: {e}")
             return False
 
-
-     def _process_edge_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
+    def _process_edge_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
         """Process Edge Node stats into vROps format"""
         metrics = []
         
@@ -154,15 +153,23 @@ class StatsCollector:
         for interface, interface_stats in stats.get('interfaces', {}).items():
             for stat_name, value in interface_stats.items():
                 if value > 0:  # Only include non-zero values
-                    metrics.append({
-                        'statKey': f'EdgePerformanceMetrics|PhysicalPorts:{interface}|{stat_name.upper()}',
-                        'timestamps': [timestamp],
-                        'data': [value]
-                    })
+                    # Treat tx_drops like tx_errors for consistency
+                    if stat_name == 'tx_drops':
+                        metrics.append({
+                            'statKey': f'EdgePerformanceMetrics|PhysicalPorts:{interface}|TX_DROPS',
+                            'timestamps': [timestamp],
+                            'data': [value]
+                        })
+                    else:
+                        metrics.append({
+                            'statKey': f'EdgePerformanceMetrics|PhysicalPorts:{interface}|{stat_name.upper()}',
+                            'timestamps': [timestamp],
+                            'data': [value]
+                        })
 
         return metrics
 
-     def _process_esxi_stats(self, host_ip: str, host_stats: Dict[str, Any], timestamp: int) -> list:
+    def _process_esxi_stats(self, host_ip: str, host_stats: Dict[str, Any], timestamp: int) -> list:
         """Process ESXi stats for a single host into vROps format"""
         metrics = []
         host_threads_over_threshold = 0
@@ -273,7 +280,7 @@ class StatsCollector:
 
         return metrics
         
-     def _merge_stats(self, default_stats: Dict, collected_stats: Dict) -> Dict:
+    def _merge_stats(self, default_stats: Dict, collected_stats: Dict) -> Dict:
         """
         Merge collected stats with defaults, ensuring dynamic vmnic handling.
         Creates default structure for any new vmnics found in collected stats.
@@ -335,8 +342,7 @@ class StatsCollector:
         
         return merged
 
-
-     def collect_cluster_metrics(self, edge_stats: Dict[str, Any], esxi_stats: Dict[str, Any], timestamp: int) -> list:
+    def collect_cluster_metrics(self, edge_stats: Dict[str, Any], esxi_stats: Dict[str, Any], timestamp: int) -> list:
         """Generate cluster-level metrics including average and total values"""
         metrics = []
         
@@ -356,7 +362,8 @@ class StatsCollector:
         
         interface_totals = {
             'rx_misses': 0.0,
-            'tx_errors': 0.0
+            'tx_errors': 0.0,
+            'tx_drops': 0.0  # Add tx_drops to totals
         }
 
         # Process Edge nodes stats
@@ -384,10 +391,14 @@ class StatsCollector:
             for interface_stats in node_stats.get('interfaces', {}).values():
                 rx_misses = interface_stats.get('rx_misses', 0)
                 tx_errors = interface_stats.get('tx_errors', 0)
+                tx_drops = interface_stats.get('tx_drops', 0)  # Get tx_drops value
+                
                 if rx_misses > 0:
                     interface_totals['rx_misses'] += rx_misses
                 if tx_errors > 0:
                     interface_totals['tx_errors'] += tx_errors
+                if tx_drops > 0:
+                    interface_totals['tx_drops'] += tx_drops  # Add to totals
 
         # Add Edge node max values metrics if they are non-zero
         for key, value in edge_max_values.items():
@@ -449,7 +460,7 @@ class StatsCollector:
 
         return metrics
     
-     def collect_and_publish_stats(self):
+    def collect_and_publish_stats(self):
         """Collect and publish both Edge and ESXi stats"""
         try:
             # Get vROps resource mappings using updated config

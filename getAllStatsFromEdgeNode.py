@@ -15,7 +15,8 @@ def calculate_max_values(stats: Dict[str, Dict[str, Any]]) -> Dict[str, float]:
         'interfaces': {
             'rx_errors': 0.0,
             'rx_misses': 0.0,
-            'tx_errors': 0.0
+            'tx_errors': 0.0,
+            'tx_drops': 0.0
         },
         'cpu': {
             'usage': 0.0,
@@ -50,6 +51,10 @@ def calculate_max_values(stats: Dict[str, Dict[str, Any]]) -> Dict[str, float]:
             max_values['interfaces']['tx_errors'] = max(
                 max_values['interfaces']['tx_errors'],
                 interface.get('tx_errors', 0)
+            )
+            max_values['interfaces']['tx_drops'] = max(
+                max_values['interfaces']['tx_drops'],
+                interface.get('tx_drops', 0)
             )
 
         # Check CPU stats
@@ -231,7 +236,8 @@ class NSXEdgeStatsCollector:
                 interface_stats[name] = {
                     'rx_errors': float(stats.get('rx_errors', 0)),
                     'rx_misses': float(stats.get('rx_misses', 0)),
-                    'tx_errors': float(stats.get('tx_errors', 0))
+                    'tx_errors': float(stats.get('tx_errors', 0)),
+                    'tx_drops': float(stats.get('tx_dropped', 0))  # Add tx_drops collection
                 }
                 
                 if self.verbose:
