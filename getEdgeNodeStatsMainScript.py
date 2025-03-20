@@ -185,13 +185,13 @@ class StatsCollector:
             # Add max values per vmnic if they are non-zero
             if vmnic_data.get('max_used', 0) > 0:
                 metrics.append({
-                    'statKey': f'Network Threads|{vmnic}|max_values|used',
+                    'statKey': f'net|Network Threads|{vmnic}|max_values|used',
                     'timestamps': [timestamp],
                     'data': [vmnic_data['max_used']]
                 })
             if vmnic_data.get('max_ready', 0) > 0:
                 metrics.append({
-                    'statKey': f'Network Threads|{vmnic}|max_values|ready',
+                    'statKey': f'net|Network Threads|{vmnic}|max_values|ready',
                     'timestamps': [timestamp],
                     'data': [vmnic_data['max_ready']]
                 })
@@ -201,7 +201,7 @@ class StatsCollector:
                 if thread_stats.get('used', 0) > 0:
                     thread_usage = thread_stats['used']
                     metrics.append({
-                        'statKey': f'Network Threads|{vmnic}|{thread_name}|used',
+                        'statKey': f'net|Network Threads|{vmnic}|{thread_name}|used',
                         'timestamps': [timestamp],
                         'data': [thread_usage]
                     })
@@ -210,7 +210,7 @@ class StatsCollector:
                         
                 if thread_stats.get('ready', 0) > 0:
                     metrics.append({
-                        'statKey': f'Network Threads|{vmnic}|{thread_name}|ready',
+                        'statKey': f'net|Network Threads|{vmnic}|{thread_name}|ready',
                         'timestamps': [timestamp],
                         'data': [thread_stats['ready']]
                     })
@@ -221,13 +221,13 @@ class StatsCollector:
             # Add max values for EnsNetWorld
             if ens_data.get('max_used', 0) > 0:
                 metrics.append({
-                    'statKey': f'Network Threads|EnsNetWorld|max_values|used',
+                    'statKey': f'net|Network Threads|EnsNetWorld|max_values|used',
                     'timestamps': [timestamp],
                     'data': [ens_data['max_used']]
                 })
             if ens_data.get('max_ready', 0) > 0:
                 metrics.append({
-                    'statKey': f'Network Threads|EnsNetWorld|max_values|ready',
+                    'statKey': f'net|Network Threads|EnsNetWorld|max_values|ready',
                     'timestamps': [timestamp],
                     'data': [ens_data['max_ready']]
                 })
@@ -237,7 +237,7 @@ class StatsCollector:
                 if thread_stats.get('used', 0) > 0:
                     thread_usage = thread_stats['used']
                     metrics.append({
-                        'statKey': f'Network Threads|EnsNetWorld|TX|{thread_name}|used',
+                        'statKey': f'net|Network Threads|EnsNetWorld|TX|{thread_name}|used',
                         'timestamps': [timestamp],
                         'data': [thread_usage]
                     })
@@ -246,7 +246,7 @@ class StatsCollector:
                         
                 if thread_stats.get('ready', 0) > 0:
                     metrics.append({
-                        'statKey': f'Network Threads|EnsNetWorld|TX|{thread_name}|ready',
+                        'statKey': f'net|Network Threads|EnsNetWorld|TX|{thread_name}|ready',
                         'timestamps': [timestamp],
                         'data': [thread_stats['ready']]
                     })
@@ -256,7 +256,7 @@ class StatsCollector:
                 if thread_stats.get('used', 0) > 0:
                     thread_usage = thread_stats['used']
                     metrics.append({
-                        'statKey': f'Network Threads|EnsNetWorld|RX|{thread_name}|used',
+                        'statKey': f'net|Network Threads|EnsNetWorld|RX|{thread_name}|used',
                         'timestamps': [timestamp],
                         'data': [thread_usage]
                     })
@@ -265,7 +265,7 @@ class StatsCollector:
                         
                 if thread_stats.get('ready', 0) > 0:
                     metrics.append({
-                        'statKey': f'Network Threads|EnsNetWorld|RX|{thread_name}|ready',
+                        'statKey': f'net|Network Threads|EnsNetWorld|RX|{thread_name}|ready',
                         'timestamps': [timestamp],
                         'data': [thread_stats['ready']]
                     })
@@ -273,7 +273,7 @@ class StatsCollector:
         # Add host-level threshold counter
         if host_threads_over_threshold > 0:
             metrics.append({
-                'statKey': f'Network Threads|threads_over_usage_threshold',
+                'statKey': f'net|Network Threads|threads_over_usage_threshold',
                 'timestamps': [timestamp],
                 'data': [host_threads_over_threshold]
             })
