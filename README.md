@@ -839,7 +839,7 @@ The collected metrics are organized hierarchically in vROPs under the Edge Clust
   - Shows historical trends of packet drops and errors
 
 ### ESXi Host Metrics
-![ESXi EnsNetWorld Stats](images/ENS_MAX_USED.png)
+![ESXi EnsNetWorld Stats](images/ESXi Threads Aggregate v2.png)
 - Located under EdgePerformanceMetrics/ESXi
 - EnsNetWorld thread statistics:
   - CPU usage per thread
@@ -847,7 +847,7 @@ The collected metrics are organized hierarchically in vROPs under the Edge Clust
   - Thread utilization trends
 
 ### Individual Thread Metrics
-![VMNIC Thread Details](images/ESX_Pollworld.png)
+![VMNIC Thread Details](images/ESXi threads v2.png)
 - Detailed view of individual VMNIC threads
 - Shows:
   - Per-thread CPU usage
