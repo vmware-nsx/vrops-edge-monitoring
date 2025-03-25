@@ -140,23 +140,22 @@ nsx_manager:
   ip: "10.191.21.92"
 
 edge_nodes:
-  "18b3dd22-2ba6-482a-80a3-eb90068dfb2d": "10.191.21.93"  # Edge Node UUID: IP address
-  "e5b7ce1b-4210-46dd-a3f9-38bd1c71e332": "10.191.21.97"  # Edge Node UUID: IP address
+  18b3dd22-2ba6-482a-80a3-eb90068dfb2d: 10.191.21.93  # Edge Node UUID: IP address
+  e5b7ce1b-4210-46dd-a3f9-38bd1c71e332: 10.191.21.97  # Edge Node UUID: IP address
 
 edge_clusters:
-  "2ebffbe1-8aca-46de-919a-cf606c15ed82":    # Edge Cluster UUID
+  2ebffbe1-8aca-46de-919a-cf606c15ed82:    # Edge Cluster UUID
     nodes:
-      - "18b3dd22-2ba6-482a-80a3-eb90068dfb2d"
-      - "e5b7ce1b-4210-46dd-a3f9-38bd1c71e332"
+      - 18b3dd22-2ba6-482a-80a3-eb90068dfb2d
+      - e5b7ce1b-4210-46dd-a3f9-38bd1c71e332
     esxi_hosts:
-      "esxi-01": "10.163.183.151"            # ESXi hostname: IP address
-      "esxi-02": "10.163.183.152"            # ESXi hostname: IP address
+      10.163.183.151: 39095510-a095-4344-8d81-4de80da95871  # ESXi IP address: vROps entity ID
+      10.163.183.152: bf7e490a-3f0f-4f00-b2f8-804e36d52df0  # ESXi IP address: vROps entity ID
 
 vrops_instance:
   ip: "10.191.21.95"
-  adapter_instance_id: "8e434d15-a29b-4776-aea3-bb21bc5c2c2f"  # See note below about finding this ID
+  adapter_instance_id: "fe470524-a2c7-4890-ba43-4f317a88bb76"  # NSX adapter instance ID in vROps
 ```
-
 > **Note:** For instructions on finding your vROPs NSX adapter instance ID, refer to the [vROPs Metric Visualization](https://github.com/vmware-nsx/vrops-edge-monitoring/blob/main/README.md#vrops-metric-visualization) section of this documentation.
 
 ### Credentials File (`credentials.yaml`)
@@ -193,6 +192,7 @@ vrops_instance:
 - Edge Node UUIDs must be obtained from NSX Manager
 - Edge Cluster UUID must match the NSX Edge Cluster UUID
 - ESXi hosts should include all hosts where Edge nodes could run
+- ESXi hosts are defined using their IP addresses as keys with their vROps entity IDs as values
 - All IP addresses must be reachable from the monitoring server
 
 ### Credential Notes
