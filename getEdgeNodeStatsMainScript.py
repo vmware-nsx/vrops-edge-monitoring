@@ -27,10 +27,10 @@ DEFAULT_EDGE_NODE_STATS = {
         }
     },
     'interfaces': {
-        'fp-eth0': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0},
-        'fp-eth1': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0},
-        'fp-eth2': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0},
-        'fp-eth3': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0}
+        'fp-eth0': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0, 'tx_drops': 0},
+        'fp-eth1': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0, 'tx_drops': 0},
+        'fp-eth2': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0, 'tx_drops': 0},
+        'fp-eth3': {'rx_errors': 0, 'rx_misses': 0, 'tx_errors': 0, 'tx_drops': 0}
     }
 }
 
@@ -43,7 +43,7 @@ DEFAULT_ESXI_STATS = {
 }
 
 class StatsCollector:
-     def __init__(self, verbose: bool = False, usage_threshold: float = 85.0):
+    def __init__(self, verbose: bool = False, usage_threshold: float = 85.0):
         self.logger = logging.getLogger(__name__)
         self.verbose = verbose
         self.usage_threshold = usage_threshold
@@ -69,7 +69,7 @@ class StatsCollector:
         if self.verbose:
             self.logger.info("StatsCollector initialized with new configuration format")
 
-     def _get_vrops_resource_map(self, adapter_kind: str, resource_kind: str) -> Dict[str, str]:
+    def _get_vrops_resource_map(self, adapter_kind: str, resource_kind: str) -> Dict[str, str]:
         """Get vROps resource ID mapping"""
         url = (f"https://{self.vrops_config['ip']}/suite-api/api/resources"
                f"?adapterInstanceId={self.vrops_config['adapterInstanceId']}"
@@ -103,7 +103,7 @@ class StatsCollector:
             self.logger.error(f"Failed to get vROps resource mapping: {e}")
             return {}
 
-     def _publish_to_vrops(self, metrics: Dict[str, Any]) -> bool:
+    def _publish_to_vrops(self, metrics: Dict[str, Any]) -> bool:
         """Publish metrics to vROps"""
         url = (f"https://{self.vrops_config['ip']}/suite-api/api/resources/stats"
                f"?disableAnalyticsProcessing=false&_no_links=true")
@@ -123,8 +123,7 @@ class StatsCollector:
             self.logger.error(f"Failed to publish metrics: {e}")
             return False
 
-
-     def _process_edge_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
+    def _process_edge_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
         """Process Edge Node stats into vROps format"""
         metrics = []
         
@@ -154,139 +153,134 @@ class StatsCollector:
         for interface, interface_stats in stats.get('interfaces', {}).items():
             for stat_name, value in interface_stats.items():
                 if value > 0:  # Only include non-zero values
-                    metrics.append({
-                        'statKey': f'EdgePerformanceMetrics|PhysicalPorts:{interface}|{stat_name.upper()}',
-                        'timestamps': [timestamp],
-                        'data': [value]
-                    })
+                    # Treat tx_drops like tx_errors for consistency
+                    if stat_name == 'tx_drops':
+                        metrics.append({
+                            'statKey': f'EdgePerformanceMetrics|PhysicalPorts:{interface}|TX_DROPS',
+                            'timestamps': [timestamp],
+                            'data': [value]
+                        })
+                    else:
+                        metrics.append({
+                            'statKey': f'EdgePerformanceMetrics|PhysicalPorts:{interface}|{stat_name.upper()}',
+                            'timestamps': [timestamp],
+                            'data': [value]
+                        })
 
         return metrics
 
-     def _process_esxi_stats(self, stats: Dict[str, Any], timestamp: int) -> list:
-        """Process ESXi stats into vROps format"""
+    def _process_esxi_stats(self, host_ip: str, host_stats: Dict[str, Any], timestamp: int) -> list:
+        """Process ESXi stats for a single host into vROps format"""
         metrics = []
-        total_threads_over_threshold = 0
+        host_threads_over_threshold = 0
         
-        # Process host-level stats
-        hosts_stats = stats.get('hosts', {})
-        for host_id, host_stats in hosts_stats.items():
-            vmnic_stats = host_stats.get('vmnic_stats', {})
-            host_threads_over_threshold = 0
-            
-            # Process all vmnic entries dynamically
-            for vmnic, vmnic_data in vmnic_stats.items():
-                # Skip the 'ens' key as it's handled separately
-                if vmnic == 'ens':
-                    continue
-                    
-                # Add max values per vmnic if they are non-zero
-                if vmnic_data.get('max_used', 0) > 0:
-                    metrics.append({
-                        'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|{vmnic}|max_values|used',
-                        'timestamps': [timestamp],
-                        'data': [vmnic_data['max_used']]
-                    })
-                if vmnic_data.get('max_ready', 0) > 0:
-                    metrics.append({
-                        'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|{vmnic}|max_values|ready',
-                        'timestamps': [timestamp],
-                        'data': [vmnic_data['max_ready']]
-                    })
+        vmnic_stats = host_stats.get('vmnic_stats', {})
+        
+        # Process all vmnic entries dynamically
+        for vmnic, vmnic_data in vmnic_stats.items():
+            # Skip the 'ens' key as it's handled separately
+            if vmnic == 'ens':
+                continue
                 
-                # Process thread stats for each vmnic and count high usage threads
-                for thread_name, thread_stats in vmnic_data.get('threads', {}).items():
-                    if thread_stats.get('used', 0) > 0:
-                        thread_usage = thread_stats['used']
-                        metrics.append({
-                            'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|{vmnic}|{thread_name}|used',
-                            'timestamps': [timestamp],
-                            'data': [thread_usage]
-                        })
-                        if thread_usage >= self.usage_threshold:
-                            host_threads_over_threshold += 1
-                            
-                    if thread_stats.get('ready', 0) > 0:
-                        metrics.append({
-                            'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|{vmnic}|{thread_name}|ready',
-                            'timestamps': [timestamp],
-                            'data': [thread_stats['ready']]
-                        })
-            
-            # Process EnsNetWorld stats if present
-            ens_data = vmnic_stats.get('ens', {})
-            if ens_data:
-                # Add max values for EnsNetWorld
-                if ens_data.get('max_used', 0) > 0:
-                    metrics.append({
-                        'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|EnsNetWorld|max_values|used',
-                        'timestamps': [timestamp],
-                        'data': [ens_data['max_used']]
-                    })
-                if ens_data.get('max_ready', 0) > 0:
-                    metrics.append({
-                        'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|EnsNetWorld|max_values|ready',
-                        'timestamps': [timestamp],
-                        'data': [ens_data['max_ready']]
-                    })
-                
-                # Process TX threads and count high usage
-                for thread_name, thread_stats in ens_data.get('tx', {}).get('threads', {}).items():
-                    if thread_stats.get('used', 0) > 0:
-                        thread_usage = thread_stats['used']
-                        metrics.append({
-                            'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|EnsNetWorld|TX|{thread_name}|used',
-                            'timestamps': [timestamp],
-                            'data': [thread_usage]
-                        })
-                        if thread_usage >= self.usage_threshold:
-                            host_threads_over_threshold += 1
-                            
-                    if thread_stats.get('ready', 0) > 0:
-                        metrics.append({
-                            'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|EnsNetWorld|TX|{thread_name}|ready',
-                            'timestamps': [timestamp],
-                            'data': [thread_stats['ready']]
-                        })
-                
-                # Process RX threads and count high usage
-                for thread_name, thread_stats in ens_data.get('rx', {}).get('threads', {}).items():
-                    if thread_stats.get('used', 0) > 0:
-                        thread_usage = thread_stats['used']
-                        metrics.append({
-                            'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|EnsNetWorld|RX|{thread_name}|used',
-                            'timestamps': [timestamp],
-                            'data': [thread_usage]
-                        })
-                        if thread_usage >= self.usage_threshold:
-                            host_threads_over_threshold += 1
-                            
-                    if thread_stats.get('ready', 0) > 0:
-                        metrics.append({
-                            'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|EnsNetWorld|RX|{thread_name}|ready',
-                            'timestamps': [timestamp],
-                            'data': [thread_stats['ready']]
-                        })
-            
-            # Add host-level threshold counter
-            if host_threads_over_threshold > 0:
+            # Add max values per vmnic if they are non-zero
+            if vmnic_data.get('max_used', 0) > 0:
                 metrics.append({
-                    'statKey': f'EdgePerformanceMetrics|ESXi|{host_id}|threads_over_usage_threshold',
+                    'statKey': f'net|Network Threads|{vmnic}|max_values|used',
                     'timestamps': [timestamp],
-                    'data': [host_threads_over_threshold]
+                    'data': [vmnic_data['max_used']]
                 })
-                total_threads_over_threshold += host_threads_over_threshold
+            if vmnic_data.get('max_ready', 0) > 0:
+                metrics.append({
+                    'statKey': f'net|Network Threads|{vmnic}|max_values|ready',
+                    'timestamps': [timestamp],
+                    'data': [vmnic_data['max_ready']]
+                })
+            
+            # Process thread stats for each vmnic and count high usage threads
+            for thread_name, thread_stats in vmnic_data.get('threads', {}).items():
+                if thread_stats.get('used', 0) > 0:
+                    thread_usage = thread_stats['used']
+                    metrics.append({
+                        'statKey': f'net|Network Threads|{vmnic}|{thread_name}|used',
+                        'timestamps': [timestamp],
+                        'data': [thread_usage]
+                    })
+                    if thread_usage >= self.usage_threshold:
+                        host_threads_over_threshold += 1
+                        
+                if thread_stats.get('ready', 0) > 0:
+                    metrics.append({
+                        'statKey': f'net|Network Threads|{vmnic}|{thread_name}|ready',
+                        'timestamps': [timestamp],
+                        'data': [thread_stats['ready']]
+                    })
         
-        # Add total threads over threshold across all ESXis
-        if total_threads_over_threshold > 0:
+        # Process EnsNetWorld stats if present
+        ens_data = vmnic_stats.get('ens', {})
+        if ens_data:
+            # Add max values for EnsNetWorld
+            if ens_data.get('max_used', 0) > 0:
+                metrics.append({
+                    'statKey': f'net|Network Threads|EnsNetWorld|max_values|used',
+                    'timestamps': [timestamp],
+                    'data': [ens_data['max_used']]
+                })
+            if ens_data.get('max_ready', 0) > 0:
+                metrics.append({
+                    'statKey': f'net|Network Threads|EnsNetWorld|max_values|ready',
+                    'timestamps': [timestamp],
+                    'data': [ens_data['max_ready']]
+                })
+            
+            # Process TX threads and count high usage
+            for thread_name, thread_stats in ens_data.get('tx', {}).get('threads', {}).items():
+                if thread_stats.get('used', 0) > 0:
+                    thread_usage = thread_stats['used']
+                    metrics.append({
+                        'statKey': f'net|Network Threads|EnsNetWorld|TX|{thread_name}|used',
+                        'timestamps': [timestamp],
+                        'data': [thread_usage]
+                    })
+                    if thread_usage >= self.usage_threshold:
+                        host_threads_over_threshold += 1
+                        
+                if thread_stats.get('ready', 0) > 0:
+                    metrics.append({
+                        'statKey': f'net|Network Threads|EnsNetWorld|TX|{thread_name}|ready',
+                        'timestamps': [timestamp],
+                        'data': [thread_stats['ready']]
+                    })
+            
+            # Process RX threads and count high usage
+            for thread_name, thread_stats in ens_data.get('rx', {}).get('threads', {}).items():
+                if thread_stats.get('used', 0) > 0:
+                    thread_usage = thread_stats['used']
+                    metrics.append({
+                        'statKey': f'net|Network Threads|EnsNetWorld|RX|{thread_name}|used',
+                        'timestamps': [timestamp],
+                        'data': [thread_usage]
+                    })
+                    if thread_usage >= self.usage_threshold:
+                        host_threads_over_threshold += 1
+                        
+                if thread_stats.get('ready', 0) > 0:
+                    metrics.append({
+                        'statKey': f'net|Network Threads|EnsNetWorld|RX|{thread_name}|ready',
+                        'timestamps': [timestamp],
+                        'data': [thread_stats['ready']]
+                    })
+        
+        # Add host-level threshold counter
+        if host_threads_over_threshold > 0:
             metrics.append({
-                'statKey': 'EdgePerformanceMetrics|ESXi|max_values|threads_over_usage_threshold_(All_ESXis)',
+                'statKey': f'net|Network Threads|threads_over_usage_threshold',
                 'timestamps': [timestamp],
-                'data': [total_threads_over_threshold]
+                'data': [host_threads_over_threshold]
             })
 
         return metrics
         
-     def _merge_stats(self, default_stats: Dict, collected_stats: Dict) -> Dict:
+    def _merge_stats(self, default_stats: Dict, collected_stats: Dict) -> Dict:
         """
         Merge collected stats with defaults, ensuring dynamic vmnic handling.
         Creates default structure for any new vmnics found in collected stats.
@@ -296,25 +290,29 @@ class StatsCollector:
         try:
             # Special handling for vmnic_stats to ensure dynamic vmnic support
             if 'hosts' in collected_stats:
-                for host_id, host_stats in collected_stats['hosts'].items():
+                for host_ip, host_stats in collected_stats['hosts'].items():
                     if 'vmnic_stats' in host_stats:
                         # Create host entry if it doesn't exist
-                        if host_id not in merged['hosts']:
-                            merged['hosts'][host_id] = {'vmnic_stats': {}}
+                        if host_ip not in merged['hosts']:
+                            merged['hosts'][host_ip] = {'vmnic_stats': {}}
+                            
+                        # Store the vROPs ID if it exists in the collected stats
+                        if 'vrops_id' in host_stats:
+                            merged['hosts'][host_ip]['vrops_id'] = host_stats['vrops_id']
                             
                         # Process each vmnic found in collected stats
                         for vmnic, vmnic_data in host_stats['vmnic_stats'].items():
-                            if vmnic not in merged['hosts'][host_id]['vmnic_stats']:
+                            if vmnic not in merged['hosts'][host_ip]['vmnic_stats']:
                                 # Add default structure for new vmnic
                                 if vmnic == 'ens':
-                                    merged['hosts'][host_id]['vmnic_stats'][vmnic] = {
+                                    merged['hosts'][host_ip]['vmnic_stats'][vmnic] = {
                                         'max_used': 0,
                                         'max_ready': 0,
                                         'tx': {'threads': {}},
                                         'rx': {'threads': {}}
                                     }
                                 else:
-                                    merged['hosts'][host_id]['vmnic_stats'][vmnic] = {
+                                    merged['hosts'][host_ip]['vmnic_stats'][vmnic] = {
                                         'max_used': 0,
                                         'max_ready': 0,
                                         'threads': {}
@@ -322,12 +320,12 @@ class StatsCollector:
                             
                             # Merge the data
                             if isinstance(vmnic_data, dict):
-                                merged['hosts'][host_id]['vmnic_stats'][vmnic] = self._merge_stats(
-                                    merged['hosts'][host_id]['vmnic_stats'][vmnic],
+                                merged['hosts'][host_ip]['vmnic_stats'][vmnic] = self._merge_stats(
+                                    merged['hosts'][host_ip]['vmnic_stats'][vmnic],
                                     vmnic_data
                                 )
                             else:
-                                merged['hosts'][host_id]['vmnic_stats'][vmnic] = vmnic_data
+                                merged['hosts'][host_ip]['vmnic_stats'][vmnic] = vmnic_data
 
             # Handle other keys normally
             for key, value in collected_stats.items():
@@ -344,8 +342,7 @@ class StatsCollector:
         
         return merged
 
-
-     def collect_cluster_metrics(self, edge_stats: Dict[str, Any], esxi_stats: Dict[str, Any], timestamp: int) -> list:
+    def collect_cluster_metrics(self, edge_stats: Dict[str, Any], esxi_stats: Dict[str, Any], timestamp: int) -> list:
         """Generate cluster-level metrics including average and total values"""
         metrics = []
         
@@ -365,7 +362,8 @@ class StatsCollector:
         
         interface_totals = {
             'rx_misses': 0.0,
-            'tx_errors': 0.0
+            'tx_errors': 0.0,
+            'tx_drops': 0.0  # Add tx_drops to totals
         }
 
         # Process Edge nodes stats
@@ -393,10 +391,14 @@ class StatsCollector:
             for interface_stats in node_stats.get('interfaces', {}).values():
                 rx_misses = interface_stats.get('rx_misses', 0)
                 tx_errors = interface_stats.get('tx_errors', 0)
+                tx_drops = interface_stats.get('tx_drops', 0)  # Get tx_drops value
+                
                 if rx_misses > 0:
                     interface_totals['rx_misses'] += rx_misses
                 if tx_errors > 0:
                     interface_totals['tx_errors'] += tx_errors
+                if tx_drops > 0:
+                    interface_totals['tx_drops'] += tx_drops  # Add to totals
 
         # Add Edge node max values metrics if they are non-zero
         for key, value in edge_max_values.items():
@@ -442,9 +444,23 @@ class StatsCollector:
                 'data': [esxi_max_values['ready']]
             })
 
+        # Add total threads over threshold value from ESXi hosts
+        total_threads_over_threshold = 0
+        for host_stats in esxi_stats.get('hosts', {}).values():
+            for thread_metric in metrics:
+                if thread_metric.get('statKey', '').endswith('threads_over_usage_threshold'):
+                    total_threads_over_threshold += thread_metric['data'][0]
+                    
+        if total_threads_over_threshold > 0:
+            metrics.append({
+                'statKey': 'EdgePerformanceMetrics|ESXi|max_values|threads_over_usage_threshold_(All_ESXis)',
+                'timestamps': [timestamp],
+                'data': [total_threads_over_threshold]
+            })
+
         return metrics
     
-     def collect_and_publish_stats(self):
+    def collect_and_publish_stats(self):
         """Collect and publish both Edge and ESXi stats"""
         try:
             # Get vROps resource mappings using updated config
@@ -514,36 +530,48 @@ class StatsCollector:
                 self.logger.error(f"ESXi stats collection error: {e}")
                 # Continue with default stats
 
-            # Process ESXi and cluster stats
+            # Process Edge Cluster stats (average and max values) - these still go under the cluster
             if first_cluster in cluster_ids:
                 vrops_id = cluster_ids[first_cluster]
                 if self.verbose:
                     self.logger.info(f"Found vROps ID for cluster: {vrops_id}")
                 
-                # Combine all metrics for this cluster
-                combined_metrics = []
-                
-                # Add ESXi metrics
-                esxi_metrics = self._process_esxi_stats(esxi_stats, current_time)
-                if esxi_metrics:
-                    combined_metrics.extend(esxi_metrics)
-                
-                # Add cluster-level metrics
+                # Generate cluster-level metrics (this excludes detailed ESXi stats)
                 cluster_metrics = self.collect_cluster_metrics(edge_stats, esxi_stats, current_time)
-                if cluster_metrics:
-                    combined_metrics.extend(cluster_metrics)
-                    if self.verbose:
-                        self.logger.info(f"Added {len(cluster_metrics)} cluster-level metrics")
                 
-                if combined_metrics:
+                if cluster_metrics:
                     resource_stats.append({
                         'id': vrops_id,
-                        'stat-contents': combined_metrics
+                        'stat-contents': cluster_metrics
                     })
-                else:
-                    self.logger.warning("No ESXi or cluster metrics were processed")
+                    if self.verbose:
+                        self.logger.info(f"Added {len(cluster_metrics)} cluster-level metrics")
             else:
                 self.logger.warning(f"Cluster {first_cluster} not found in vROps mappings")
+            
+            # Process ESXi host stats separately - each host gets its own metrics
+            esxi_metrics_count = 0
+            for host_ip, host_stats in esxi_stats.get('hosts', {}).items():
+                # Check if we have a vROPs ID for this host
+                if 'vrops_id' in host_stats:
+                    vrops_id = host_stats['vrops_id']
+                    
+                    # Process metrics for this host
+                    metrics = self._process_esxi_stats(host_ip, host_stats, current_time)
+                    
+                    if metrics:
+                        esxi_metrics_count += len(metrics)
+                        resource_stats.append({
+                            'id': vrops_id,
+                            'stat-contents': metrics
+                        })
+                        if self.verbose:
+                            self.logger.info(f"Added {len(metrics)} metrics for ESXi host at IP {host_ip}")
+                elif self.verbose:
+                    self.logger.warning(f"No vROPs ID found for ESXi host at IP {host_ip}")
+            
+            if self.verbose:
+                self.logger.info(f"Processed {esxi_metrics_count} ESXi host metrics")
 
             # Publish to vROps
             if resource_stats:

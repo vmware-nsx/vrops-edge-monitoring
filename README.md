@@ -140,23 +140,22 @@ nsx_manager:
   ip: "10.191.21.92"
 
 edge_nodes:
-  "18b3dd22-2ba6-482a-80a3-eb90068dfb2d": "10.191.21.93"  # Edge Node UUID: IP address
-  "e5b7ce1b-4210-46dd-a3f9-38bd1c71e332": "10.191.21.97"  # Edge Node UUID: IP address
+  18b3dd22-2ba6-482a-80a3-eb90068dfb2d: 10.191.21.93  # Edge Node UUID: IP address
+  e5b7ce1b-4210-46dd-a3f9-38bd1c71e332: 10.191.21.97  # Edge Node UUID: IP address
 
 edge_clusters:
-  "2ebffbe1-8aca-46de-919a-cf606c15ed82":    # Edge Cluster UUID
+  2ebffbe1-8aca-46de-919a-cf606c15ed82:    # Edge Cluster UUID
     nodes:
-      - "18b3dd22-2ba6-482a-80a3-eb90068dfb2d"
-      - "e5b7ce1b-4210-46dd-a3f9-38bd1c71e332"
+      - 18b3dd22-2ba6-482a-80a3-eb90068dfb2d
+      - e5b7ce1b-4210-46dd-a3f9-38bd1c71e332
     esxi_hosts:
-      "esxi-01": "10.163.183.151"            # ESXi hostname: IP address
-      "esxi-02": "10.163.183.152"            # ESXi hostname: IP address
+      10.163.183.151: 39095510-a095-4344-8d81-4de80da95871  # ESXi IP address: vROps entity ID
+      10.163.183.152: bf7e490a-3f0f-4f00-b2f8-804e36d52df0  # ESXi IP address: vROps entity ID
 
 vrops_instance:
   ip: "10.191.21.95"
-  adapter_instance_id: "8e434d15-a29b-4776-aea3-bb21bc5c2c2f"  # See note below about finding this ID
+  adapter_instance_id: "fe470524-a2c7-4890-ba43-4f317a88bb76"  # NSX adapter instance ID in vROps
 ```
-
 > **Note:** For instructions on finding your vROPs NSX adapter instance ID, refer to the [vROPs Metric Visualization](https://github.com/vmware-nsx/vrops-edge-monitoring/blob/main/README.md#vrops-metric-visualization) section of this documentation.
 
 ### Credentials File (`credentials.yaml`)
@@ -193,6 +192,7 @@ vrops_instance:
 - Edge Node UUIDs must be obtained from NSX Manager
 - Edge Cluster UUID must match the NSX Edge Cluster UUID
 - ESXi hosts should include all hosts where Edge nodes could run
+- ESXi hosts are defined using their IP addresses as keys with their vROps entity IDs as values
 - All IP addresses must be reachable from the monitoring server
 
 ### Credential Notes
@@ -210,6 +210,7 @@ For each interface (fp-eth0 through fp-eth3):
 - `rx_errors`: Number of receive errors
 - `rx_misses`: Number of receive packet misses
 - `tx_errors`: Number of transmission errors
+- `tx_drops`: Number of dropped transmission packets
 
 #### 2. CPU Performance
 For each CPU core:
@@ -337,12 +338,14 @@ The Edge Node collector produces a nested dictionary structure containing metric
         "fp-eth0": {                              # Interface name
           "rx_errors": 0.0,
           "rx_misses": 0.0,
-          "tx_errors": 0.0
+          "tx_errors": 0.0,
+          "tx_drops": 0.0
         },
         "fp-eth1": {
           "rx_errors": 76421.0,                   # Cumulative error count
           "rx_misses": 6448.0,
-          "tx_errors": 0.0
+          "tx_errors": 56.0,
+          "tx_drops": 42.0
         }
       },
       "performance": {
@@ -375,7 +378,8 @@ The Edge Node collector produces a nested dictionary structure containing metric
     "interfaces": {
       "rx_errors": 76421.0,
       "rx_misses": 6448.0,
-      "tx_errors": 0.0
+      "tx_errors": 36.0,
+      "tx_drops": 42.0
     },
     "cpu": {
       "usage": 58.0,
@@ -834,16 +838,13 @@ The collected metrics are organized hierarchically in vROPs under the Edge Clust
   - RX_ERRORS counter
   - Shows historical trends of packet drops and errors
 
-### ESXi Host Metrics
-![ESXi EnsNetWorld Stats](images/ENS_MAX_USED.png)
+### Aggregated ESXi Host Metrics
+![ESXi EnsNetWorld Stats](images/ESXi%20Threads%20Aggregate%20v2.png)
 - Located under EdgePerformanceMetrics/ESXi
-- EnsNetWorld thread statistics:
-  - CPU usage per thread
-  - Ready time metrics
-  - Thread utilization trends
+- Max value for all network threads across all ESXi supporting the edge cluster
 
 ### Individual Thread Metrics
-![VMNIC Thread Details](images/ESX_Pollworld.png)
+![VMNIC Thread Details](images/ESXi%20threads%20v2.png)
 - Detailed view of individual VMNIC threads
 - Shows:
   - Per-thread CPU usage
