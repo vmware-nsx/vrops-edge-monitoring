@@ -210,6 +210,7 @@ For each interface (fp-eth0 through fp-eth3):
 - `rx_errors`: Number of receive errors
 - `rx_misses`: Number of receive packet misses
 - `tx_errors`: Number of transmission errors
+- `tx_drops`: Number of dropped transmission packets
 
 #### 2. CPU Performance
 For each CPU core:
@@ -337,12 +338,14 @@ The Edge Node collector produces a nested dictionary structure containing metric
         "fp-eth0": {                              # Interface name
           "rx_errors": 0.0,
           "rx_misses": 0.0,
-          "tx_errors": 0.0
+          "tx_errors": 0.0,
+          "tx_drops": 0.0
         },
         "fp-eth1": {
           "rx_errors": 76421.0,                   # Cumulative error count
           "rx_misses": 6448.0,
-          "tx_errors": 0.0
+          "tx_errors": 56.0,
+          "tx_drops": 42.0
         }
       },
       "performance": {
@@ -375,7 +378,8 @@ The Edge Node collector produces a nested dictionary structure containing metric
     "interfaces": {
       "rx_errors": 76421.0,
       "rx_misses": 6448.0,
-      "tx_errors": 0.0
+      "tx_errors": 36.0,
+      "tx_drops": 42.0
     },
     "cpu": {
       "usage": 58.0,
