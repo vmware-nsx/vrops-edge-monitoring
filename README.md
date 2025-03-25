@@ -838,13 +838,10 @@ The collected metrics are organized hierarchically in vROPs under the Edge Clust
   - RX_ERRORS counter
   - Shows historical trends of packet drops and errors
 
-### ESXi Host Metrics
+### Aggregated ESXi Host Metrics
 ![ESXi EnsNetWorld Stats](images/ESXi%20Threads%20Aggregate%20v2.png)
 - Located under EdgePerformanceMetrics/ESXi
-- EnsNetWorld thread statistics:
-  - CPU usage per thread
-  - Ready time metrics
-  - Thread utilization trends
+- Max value for all network threads across all ESXi supporting the edge cluster
 
 ### Individual Thread Metrics
 ![VMNIC Thread Details](images/ESXi%20threads%20v2.png)
